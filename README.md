@@ -1,0 +1,168 @@
+# RAG-ассистент
+
+RAG-ассистент (Retrieval-Augmented Generation) для работы с базой знаний: загрузка документов из каталога `data/` в векторное хранилище и ответы на вопросы пользователя на основе релевантных фрагментов.
+
+## Возможности
+
+- **Два сценария командной строки**:
+  - [`python ingest.py`](ingest.py) — загрузка файлов базы знаний в векторное хранилище;
+  - [`python assistant.py`](assistant.py) — интерактивный ассистент: вопрос → ответ.
+- **Форматы базы знаний**: `.txt` и `.html` (из HTML извлекается текст).
+- **Чанкинг по абзацам**: один чанк — это абзац, т.е. фрагмент текста, разделённый двумя идущими подряд символами новой строки (`\n\n`).
+- **Векторные БД** (выбор в `.env`):
+  - **ChromaDB** — локальная persistent-БД на диске (каталог `chroma_data/`);
+  - **Weaviate** — *локально развёрнутый* экземпляр (Docker), не облачный сервис.
+- **LLM** (выбор в `.env`):
+  - **GigaChat** (Sber) — официальный API, пакет `gigachat`;
+  - **ProxyAPI** — OpenAI-совместимый прокси (`https://api.proxyapi.ru/openai/v1`).
+- **Эмбеддинги**: OpenAI-совместимый endpoint `/embeddings` через ProxyAPI.
+
+## Структура проекта
+
+```
+assistant/
+├── assistant.py          # сценарий: ассистент (вопрос → ответ)
+├── ingest.py             # сценарий: загрузка базы знаний в хранилище
+├── evaluate_ragas.py     # сценарий: оценка качества RAG метриками Ragas
+├── config.py             # чтение настроек из .env
+├── requirements.txt
+├── .env.example          # шаблон настроек
+├── .env                  # настройки (заполняется пользователем)
+├── data/                 # база знаний: *.txt и *.html
+│   ├── example.txt
+│   └── example.html
+└── rag/                  # библиотека RAG
+    ├── assistant.py      # точка входа: класс RagAssistant
+    ├── cache.py          # кэш ответов и истории в SQLite (ключ — SHA1 вопроса)
+    ├── chunker.py        # чтение файлов и деление на абзацы по "\n\n"
+    ├── embeddings.py     # эмбеддинги (ProxyAPI)
+    ├── storage.py        # хранилища ChromaDB / Weaviate
+    ├── prompts.py        # шаблоны промптов
+    └── llm.py            # клиенты GigaChat / ProxyAPI
+```
+
+## Установка
+
+Требуется Python 3.10+.
+
+```bash
+cd assistant
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+> Примечание: эмбеддинги строятся через ProxyAPI (endpoint `/embeddings`), поэтому тяжёлые локальные модели не требуются.
+
+## Настройка (.env)
+
+Скопируйте шаблон и заполните значения:
+
+```bash
+cp .env.example .env
+```
+
+Ключевые параметры:
+
+| Параметр | Назначение |
+|---|---|
+| `VECTOR_DB` | `chromadb` или `weaviate` |
+| `CHROMA_PERSIST_DIR` | каталог данных ChromaDB |
+| `WEAVIATE_URL` | адрес локального Weaviate (например, `http://localhost:8080`) |
+| `LLM_PROVIDER` | `gigachat` или `proxyapi` |
+| `GIGACHAT_CREDENTIALS` | client secret приложения из [developers.sber.ru](https://developers.sber.ru) |
+| `GIGACHAT_MODEL` | например `GigaChat-Max`, `GigaChat-2` |
+| `PROXYAPI_URL` / `PROXYAPI_KEY` / `PROXYAPI_MODEL` | параметры ProxyAPI |
+| `TEMPERATURE` | температура модели LLM (по умолчанию 0.2, диапазон 0.0–2.0) |
+| `PROXYAPI_EMBEDDING_MODEL` | модель эмбеддингов ProxyAPI (например, `text-embedding-3-small`) |
+| `DATA_DIR` | каталог с файлами базы знаний (по умолчанию `./data`) |
+| `CACHE_DB_PATH` | файл SQLite-кэша ответов (по умолчанию `./cache.sqlite3`) |
+| `TOP_K` | сколько найденных чанков передавать в LLM |
+| `HISTORY_SIZE` | сколько последних пар «вопрос-ответ» передавать в LLM (по умолчанию 10) |
+
+## Загрузка базы знаний
+
+Поместите файлы `.txt` и `.html` в каталог `data/` (или другой, указанный в `DATA_DIR`) и выполните:
+
+```bash
+python ingest.py
+```
+
+Скрипт прочитает файлы, разобьёт их на абзацы-чанки по `\n\n`, построит эмбеддинги и запишет их в выбранную векторную БД. Повторный запуск очищает хранилище и загружает базу заново.
+
+## Запуск ассистента
+
+```bash
+python assistant.py
+```
+
+Ассистент в интерактивном цикле принимает вопрос, ищет `TOP_K` самых похожих чанков, показывает их и формирует ответ через выбранный LLM. Для выхода введите `exit`, `выход` или нажмите `Ctrl+D`/`Ctrl+C`.
+
+## Оценка качества (Ragas)
+
+Скрипт [`python evaluate_ragas.py`](evaluate_ragas.py) оценивает качество RAG-пайплайна метриками Ragas — `faithfulness`, `answer_relevancy` и `context_precision` — на наборе прописанных в скрипте вопросов по документам из `data/`. Для каждого вопроса формируется ответ и извлекается контекст, затем метрики вычисляются через LLM и эмбеддинги ProxyAPI.
+
+```bash
+pip install ragas datasets langchain-openai langchain-community
+python evaluate_ragas.py
+```
+
+Вопросы и эталонные ответы (ground truth) задаются в списке `EVALUATION_SET` в начале скрипта. Для совместимости ragas 0.4.x с новыми версиями `langchain-community` (в которых удалён модуль Vertex AI) скрипт использует заглушки из [`rag/ragas_compat.py`](rag/ragas_compat.py).
+
+## Хранилища
+
+### ChromaDB (по умолчанию)
+
+Ничего дополнительно запускать не нужно: данные хранятся в локальном каталоге `chroma_data/`.
+
+### Weaviate (локальный, self-hosted)
+
+Weaviate поднимается на своей машине через Docker (без облачных модулей — векторы передаются вручную):
+
+```bash
+docker run -d \
+  --name weaviate \
+  -p 8080:8080 -p 50051:50051 \
+  cr.weaviate.io/semitechnologies/weaviate:1.28
+```
+
+Затем в `.env` укажите:
+
+```
+VECTOR_DB=weaviate
+WEAVIATE_URL=http://localhost:8080
+```
+
+Коллекция `Paragraph` (параметр `WEAVIATE_COLLECTION`) создаётся автоматически при первом запуске `python ingest.py`.
+
+## LLM-провайдеры
+
+- **GigaChat**: получите client secret на [developers.sber.ru](https://developers.sber.ru), укажите его в `GIGACHAT_CREDENTIALS`. Для персональных проектов подходит скоуп `GIGACHAT_API_PERS`, для корпоративных — `GIGACHAT_API_B2B`. Если сертификаты среды мешают (например, корпоративный прокси), установите `GIGACHAT_VERIFY_SSL=true`.
+- **ProxyAPI**: укажите `PROXYAPI_KEY` (sk-...) — подключение по OpenAI-совместимому API через `PROXYAPI_URL`.
+
+## Эмбеддинги
+
+Эмбеддинги всегда строятся через OpenAI-совместимый endpoint `/embeddings` ProxyAPI. Используются `PROXYAPI_URL`, `PROXYAPI_KEY` и `PROXYAPI_EMBEDDING_MODEL` (например, `text-embedding-3-small`). Запросы отправляются батчами по 64 текста.
+
+## История диалога
+
+Вместе с вопросом и найденными чанками LLM передаётся история диалога — не более `HISTORY_SIZE` последних пар «вопрос-ответ» (по умолчанию 10). История сохраняется в базе данных SQLite (таблица `dialogue_history` файла `CACHE_DB_PATH`) и восстанавливается при каждом запуске `python assistant.py`, поэтому диалог продолжается между сессиями.
+
+## Кэширование
+
+Ответы на вопросы кэшируются в базе данных SQLite (файл `CACHE_DB_PATH`, по умолчанию `./cache.sqlite3`). Перед обращением к LLM вопрос нормализуется: все буквы приводятся к нижнему регистру, последовательности пробелов схлопываются в один пробел. От нормализованного текста берётся SHA1-хэш — он служит ключом в таблице `cached_queries`. Если ответ с таким ключом уже есть, он возвращается из кэша без вызова LLM; иначе ответ сохраняется в кэш. Факт обращения к кэшу выводится через `logging` (уровень INFO). Кэш и историю можно очистить, удалив файл `cache.sqlite3`.
+
+## Пример
+
+```text
+$ python assistant.py
+RAG-ассистент готов.
+  Векторное хранилище: chromadb
+  LLM: gigachat
+Задайте вопрос или введите 'exit' / 'выход' для завершения.
+
+Вы: сколько дней составляет отпуск?
+Найдено фрагментов: 3
+  1. [example.txt#4] (сходство ~0.79): # Система «Вестник»: справочная информация ... ## Отпуска Ежегодный оплачиваемый отпуск составляет 28...
+  ...
+Ответ: Ежегодный оплачиваемый отпуск составляет 28 календарных дней.

@@ -1,0 +1,15 @@
+# Секреты и локальные настройки
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Локальные данные ChromaDB
+chroma_data/
+
+# SQLite-кэш ответов
+*.sqlite3
+cache.sqlite3
