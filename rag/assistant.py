@@ -39,9 +39,13 @@ class RagAssistant:
         # История диалога восстанавливается из SQLite (последние history_size пар)
         self._history: list[tuple[str, str]] = self._cache.get_history(config.history_size)
 
-    def ask_question(self, question: str) -> str:
-        """Возвращает текст ответа на вопрос, используя кэш, векторную БД и LLM."""
-        key = question_key(question)
+    def ask_question(self, question: str, uid: str = "") -> str:
+        """Возвращает текст ответа на вопрос, используя кэш, векторную БД и LLM.
+
+        uid — идентификатор пользователя; для каждого пользователя используется
+        отдельный кэш ответов. Пустая строка означает «общий» кэш.
+        """
+        key = question_key(question, uid)
 
         # 1. Сначала ищем ответ в кэше
         cached = self._cache.get(key)
