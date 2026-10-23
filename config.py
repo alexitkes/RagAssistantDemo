@@ -71,6 +71,11 @@ class Config:
     top_k: int                    # сколько релевантных чанков передавать в LLM
     history_size: int             # сколько последних пар «вопрос-ответ» передавать в LLM
 
+    # --- Сообщество ВКонтакте (vk_assistant.py) ---
+    vk_token: str                 # токен доступа сообщества (Bots Longpoll API)
+    vk_group_id: int | None       # id сообщества; None — определить автоматически
+    vk_api_version: str           # версия VK API, например 5.199
+
     @classmethod
     def from_env(cls) -> Config:
         vector_db = (_env("VECTOR_DB", "chromadb") or "").lower()
@@ -119,6 +124,17 @@ class Config:
         if not 0.0 <= temperature <= 2.0:
             raise ConfigError("TEMPERATURE должен быть в диапазоне [0.0, 2.0]")
 
+        # --- Настройки сообщества ВКонтакте (необязательные; нужны только для vk_assistant.py) ---
+        vk_token = _env("VK_TOKEN", "") or ""
+        vk_group_id_raw = _env("VK_GROUP_ID", "") or ""
+        try:
+            vk_group_id = int(vk_group_id_raw) if vk_group_id_raw else None
+        except ValueError as exc:
+            raise ConfigError(
+                "VK_GROUP_ID должен быть целым числом (идентификатор сообщества)"
+            ) from exc
+        vk_api_version = _env("VK_API_VERSION", "5.199") or "5.199"
+
         return cls(
             vector_db=vector_db,
             chroma_persist_dir=Path(
@@ -149,4 +165,7 @@ class Config:
             top_k=top_k,
             history_size=history_size,
             temperature=temperature,
+            vk_token=vk_token,
+            vk_group_id=vk_group_id,
+            vk_api_version=vk_api_version,
         )
