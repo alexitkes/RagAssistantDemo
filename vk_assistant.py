@@ -18,7 +18,6 @@ RAG-ассистент для сообщества ВКонтакте (Longpoll 
 
 Пример запуска:
     python vk_assistant.py
-    ./vk_assistant.py
 """
 from __future__ import annotations
 
