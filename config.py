@@ -42,6 +42,17 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value.lower() in {"1", "true", "yes", "on", "да"}
 
 
+def _env_int(name: str, default: int) -> int:
+    """Возвращает целочисленное значение переменной окружения или default."""
+    value = _env(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ConfigError(f"{name} должен быть целым числом") from exc
+
+
 @dataclass(frozen=True)
 class Config:
     """Полный набор настроек приложения, полученный из .env."""
@@ -70,6 +81,8 @@ class Config:
     cache_db_path: Path           # файл SQLite-кэша ответов на вопросы
     top_k: int                    # сколько релевантных чанков передавать в LLM
     history_size: int             # сколько последних пар «вопрос-ответ» передавать в LLM
+    max_questions_per_minute: int # не более N вопросов в минуту от одного пользователя
+    max_questions_per_day: int    # не более M вопросов в сутки от одного пользователя
 
     # --- Сообщество ВКонтакте (vk_assistant.py) ---
     vk_token: str                 # токен доступа сообщества (Bots Longpoll API)
@@ -116,6 +129,14 @@ class Config:
             raise ConfigError("HISTORY_SIZE должен быть целым числом") from exc
         if history_size < 1:
             raise ConfigError("HISTORY_SIZE должен быть положительным числом")
+
+        max_questions_per_minute = _env_int("MAX_QUESTIONS_PER_MINUTE", 5)
+        if max_questions_per_minute < 1:
+            raise ConfigError("MAX_QUESTIONS_PER_MINUTE должен быть положительным числом")
+
+        max_questions_per_day = _env_int("MAX_QUESTIONS_PER_DAY", 50)
+        if max_questions_per_day < 1:
+            raise ConfigError("MAX_QUESTIONS_PER_DAY должен быть положительным числом")
 
         try:
             temperature = float(_env("TEMPERATURE", "0.2") or 0.2)
@@ -164,6 +185,8 @@ class Config:
             ).resolve(),
             top_k=top_k,
             history_size=history_size,
+            max_questions_per_minute=max_questions_per_minute,
+            max_questions_per_day=max_questions_per_day,
             temperature=temperature,
             vk_token=vk_token,
             vk_group_id=vk_group_id,

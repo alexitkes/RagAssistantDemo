@@ -19,6 +19,7 @@ from config import Config
 from .cache import Cache, question_key
 from .embeddings import Embedder
 from .llm import ask
+from .rate_limit import RateLimitError, RateLimiter
 from .storage import VectorStorage, create_storage
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,11 @@ class RagAssistant:
         )
         self._storage: VectorStorage = create_storage(config)
         self._cache = Cache(config.cache_db_path)
+        self._rate_limiter = RateLimiter(
+            config.cache_db_path,
+            per_minute=config.max_questions_per_minute,
+            per_day=config.max_questions_per_day,
+        )
         # История диалога восстанавливается из SQLite (последние history_size пар)
         self._history: list[tuple[str, str]] = self._cache.get_history(config.history_size)
 
@@ -44,7 +50,19 @@ class RagAssistant:
 
         uid — идентификатор пользователя; для каждого пользователя используется
         отдельный кэш ответов. Пустая строка означает «общий» кэш.
+
+        Момент каждого вопроса фиксируется в SQLite: один пользователь может
+        задать не более max_questions_per_minute вопросов в минуту и не более
+        max_questions_per_day в сутки (иначе — RateLimitError).
         """
+        # 0. Проверяем лимит частоты и фиксируем момент задавания вопроса
+        if not self._rate_limiter.allow(uid):
+            raise RateLimitError(
+                "Слишком много вопросов: не более "
+                f"{self.config.max_questions_per_minute} в минуту и "
+                f"{self.config.max_questions_per_day} в сутки. Попробуйте позже."
+            )
+
         key = question_key(question, uid)
 
         # 1. Сначала ищем ответ в кэше
@@ -100,6 +118,7 @@ class RagAssistant:
         self._cache.add_history(question, answer)
 
     def close(self) -> None:
-        """Закрывает соединения с векторным хранилищем и кэшем."""
+        """Закрывает соединения с векторным хранилищем, кэшем и журналом лимитов."""
         self._storage.close()
         self._cache.close()
+        self._rate_limiter.close()
