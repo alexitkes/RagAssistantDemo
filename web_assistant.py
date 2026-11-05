@@ -14,7 +14,10 @@ RAG-ассистент: веб-приложение на Flask с регистр
      идентификатора пользователя передаётся строка "id_{ИД_ИЗ_БАЗЫ}".
      Это даёт каждому пользователю отдельный кэш ответов и отдельный лимит
      частоты вопросов;
-  4. полученный ответ выводится на странице вместе с формой для следующего вопроса.
+  4. полученный ответ выводится на странице вместе с формой для следующего вопроса;
+  5. HTML-страницы (чат, регистрация, вход) вынесены в каталог templates/
+     (Jinja2-шаблоны, наследуются от templates/base.html, где собраны общие
+     стили формы).
 
 Конфигурация читается классом Config из config.py (переменные — в файле .env,
 шаблон — .env.example).
@@ -38,14 +41,7 @@ import logging
 import secrets
 import threading
 
-from flask import (
-    Flask,
-    redirect,
-    render_template_string,
-    request,
-    session,
-    url_for,
-)
+from flask import Flask, redirect, render_template, request, session, url_for
 
 from config import Config, ConfigError
 from rag.assistant import RagAssistant
@@ -72,166 +68,6 @@ _assistant: RagAssistant | None = None
 _user_store: UserStore | None = None
 _services_lock = threading.Lock()
 
-BASE_CSS = """\
-:root { color-scheme: light dark; }
-body {
-  max-width: 760px;
-  margin: 2rem auto;
-  padding: 0 1rem;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.55;
-}
-h1 { margin-bottom: 0.25rem; }
-.subtitle { color: #667; margin-top: 0; }
-.answer, .error, .notice {
-  border-radius: 8px;
-  padding: 1rem 1.25rem;
-  margin: 1.5rem 0;
-}
-.answer { background: #eef6ff; border: 1px solid #bcd9f5; }
-.error { background: #fff0f0; border: 1px solid #f0b9b9; color: #8a1f1f; }
-.notice { background: #f0fff4; border: 1px solid #b9e6c3; color: #1f6a34; }
-.answer h2 { margin-top: 0; }
-.answer pre { white-space: pre-wrap; font-family: inherit; margin: 0.25rem 0 0; }
-label { font-weight: 600; display: block; margin: 1rem 0 0.35rem; }
-textarea, input[type="text"], input[type="email"], input[type="password"] {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.6rem 0.75rem;
-  font: inherit;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-}
-button {
-  margin-top: 0.75rem;
-  padding: 0.55rem 1.4rem;
-  font: inherit;
-  font-weight: 600;
-  color: #fff;
-  background: #1a6fb5;
-  border: 0;
-  border-radius: 6px;
-  cursor: pointer;
-}
-button:hover { background: #155c96; }
-button.linklike {
-  margin-top: 0;
-  padding: 0.15rem 0.5rem;
-  background: none;
-  color: #1a6fb5;
-  font-weight: 600;
-}
-nav { margin-bottom: 1rem; color: #667; }
-nav a { color: #1a6fb5; text-decoration: none; }
-"""
-
-PAGE_TEMPLATE = """\
-<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>RAG-ассистент</title>
-  <style>{{ base_css }}</style>
-</head>
-<body>
-  <nav>
-    Вы вошли как <strong>{{ display_name|e }}</strong>
-    ({{ user_email|e }}) · <a href="{{ url_for('logout') }}">Выйти</a>
-  </nav>
-
-  <h1>RAG-ассистент</h1>
-  <p class="subtitle">Задайте вопрос по базе знаний — ответ будет сформирован на основе найденных документов.</p>
-
-  {% if error %}
-  <div class="error">{{ error|e }}</div>
-  {% endif %}
-
-  {% if answer is not none %}
-  <div class="answer">
-    <h2>Ответ</h2>
-    <p class="subtitle" style="margin-top: 0"><strong>Вопрос:</strong> {{ question|e }}</p>
-    <pre>{{ answer|e }}</pre>
-  </div>
-  {% endif %}
-
-  <form method="post" autocomplete="off">
-    <label for="question">Ваш вопрос:</label>
-    <textarea id="question" name="question" rows="5" required autofocus
-              placeholder="Например: Какие требования предъявляются к ...?"></textarea>
-    <button type="submit">Задать вопрос</button>
-  </form>
-</body>
-</html>
-"""
-
-REGISTER_TEMPLATE = """\
-<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Регистрация — RAG-ассистент</title>
-  <style>{{ base_css }}</style>
-</head>
-<body>
-  <h1>Регистрация</h1>
-  <p class="subtitle">Зарегистрируйтесь, чтобы получить доступ к чату с ассистентом.</p>
-
-  {% if error %}
-  <div class="error">{{ error|e }}</div>
-  {% endif %}
-
-  <form method="post">
-    <label for="email">Электронная почта:</label>
-    <input type="email" id="email" name="email" value="{{ email|e }}" required autofocus>
-    <label for="display_name">Отображаемое имя:</label>
-    <input type="text" id="display_name" name="display_name" value="{{ display_name|e }}" required>
-    <label for="password">Пароль (не менее 8 символов):</label>
-    <input type="password" id="password" name="password" required>
-    <label for="password2">Подтверждение пароля:</label>
-    <input type="password" id="password2" name="password2" required>
-    <button type="submit">Зарегистрироваться</button>
-  </form>
-
-  <p>Уже зарегистрированы? <a href="{{ url_for('login') }}">Войти</a></p>
-</body>
-</html>
-"""
-
-LOGIN_TEMPLATE = """\
-<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Вход — RAG-ассистент</title>
-  <style>{{ base_css }}</style>
-</head>
-<body>
-  <h1>Вход</h1>
-  <p class="subtitle">Войдите, чтобы задавать вопросы ассистенту.</p>
-
-  {% if error %}
-  <div class="error">{{ error|e }}</div>
-  {% endif %}
-
-  {% if registered %}
-  <div class="notice">Регистрация прошла успешно. Теперь войдите, используя e-mail и пароль.</div>
-  {% endif %}
-
-  <form method="post">
-    <label for="email">Электронная почта:</label>
-    <input type="email" id="email" name="email" value="{{ email|e }}" required autofocus>
-    <label for="password">Пароль:</label>
-    <input type="password" id="password" name="password" required>
-    <button type="submit">Войти</button>
-  </form>
-
-  <p>Ещё нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a></p>
-</body>
-</html>
-"""
 
 
 def get_config() -> Config:
@@ -334,9 +170,8 @@ def index() -> str:
                     logger.exception("[%s] Ошибка при формировании ответа", uid)
                     error = "Не удалось сформировать ответ. Попробуйте позже."
 
-    return render_template_string(
-        PAGE_TEMPLATE,
-        base_css=BASE_CSS,
+    return render_template(
+        "index.html",
         display_name=user.display_name,
         user_email=user.email,
         question=question,
@@ -373,9 +208,8 @@ def register() -> str:
             # После успешной регистрации предлагаем войти
             return redirect(url_for("login", registered=1))
 
-    return render_template_string(
-        REGISTER_TEMPLATE,
-        base_css=BASE_CSS,
+    return render_template(
+        "register.html",
         email=email,
         display_name=display_name,
         error=error,
@@ -415,9 +249,8 @@ def login() -> str:
                     next_url = url_for("index")
                 return redirect(next_url)
 
-    return render_template_string(
-        LOGIN_TEMPLATE,
-        base_css=BASE_CSS,
+    return render_template(
+        "login.html",
         email=email,
         error=error,
         registered=registered,

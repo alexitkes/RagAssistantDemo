@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}RAG-ассистент{% endblock %}
+
+{% block nav %}
+<nav>
+  Вы вошли как <strong>{{ display_name }}</strong>
+  ({{ user_email }}) · <a href="{{ url_for('logout') }}">Выйти</a>
+</nav>
+{% endblock %}
+
+{% block page_subtitle %}Задайте вопрос по базе знаний — ответ будет сформирован на основе найденных документов.{% endblock %}
+
+{% block content %}
+{% if answer is not none %}
+<div class="answer">
+  <h2>Ответ</h2>
+  <p class="subtitle" style="margin-top: 0"><strong>Вопрос:</strong> {{ question }}</p>
+  <pre>{{ answer }}</pre>
+</div>
+{% endif %}
+
+<form method="post" autocomplete="off">
+  <label for="question">Ваш вопрос:</label>
+  <textarea id="question" name="question" rows="5" required autofocus
+            placeholder="Например: Какие требования предъявляются к ...?"></textarea>
+  <button type="submit">Задать вопрос</button>
+</form>
+{% endblock %}
