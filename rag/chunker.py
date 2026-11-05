@@ -3,7 +3,8 @@
 
 Правило деления на чанки: один чанк = один абзац, то есть фрагмент текста,
 ограниченный разделителем из двух идущих подряд символов новой строки ("\n\n").
-Поддерживаются файлы форматов .txt и .html (из HTML извлекается текст).
+Поддерживаются файлы форматов .txt, .html (из HTML извлекается текст)
+и .pdf (из PDF извлекается текст).
 """
 from __future__ import annotations
 
@@ -15,7 +16,8 @@ PARAGRAPH_SEPARATOR = "\n\n"
 
 _TEXT_EXTENSIONS = {".txt"}
 _HTML_EXTENSIONS = {".html", ".htm"}
-SUPPORTED_EXTENSIONS = _TEXT_EXTENSIONS | _HTML_EXTENSIONS
+_PDF_EXTENSIONS = {".pdf"}
+SUPPORTED_EXTENSIONS = _TEXT_EXTENSIONS | _HTML_EXTENSIONS | _PDF_EXTENSIONS
 
 # Блочные HTML-элементы: после них вставляется пустая строка, чтобы
 # абзацы в итоговом тексте были разделены символами "\n\n".
@@ -97,6 +99,39 @@ def html_to_text(html: str) -> str:
     return text
 
 
+def pdf_to_text(pdf_bytes: bytes) -> str:
+    """Извлекает текст из PDF-документа (по всем страницам).
+
+    Для извлечения текста используется пакет pypdf. Текст каждой страницы
+    отделяется пустой строкой, чтобы абзацы на стыке страниц не склеивались.
+    """
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise ImportError(
+            "Для поддержки PDF установите пакет pypdf: pip install pypdf"
+        ) from exc
+
+    import io
+
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception as exc:  # noqa: BLE001
+            raise ValueError("PDF-документ защищён паролем и не может быть прочитан") from exc
+
+    pages_text: list[str] = []
+    for page in reader.pages:
+        page_text = page.extract_text() or ""
+        page_text = re.sub(r"[ \t]+\n", "\n", page_text)  # хвостовые пробелы перед переносами
+        page_text = re.sub(r"\n{3,}", "\n\n", page_text)  # несколько пустых строк подряд
+        page_text = page_text.strip()
+        if page_text:
+            pages_text.append(page_text)
+    return "\n\n".join(pages_text)
+
+
 def _normalize_newlines(text: str) -> str:
     """Приводит переводы строк к единому виду "\n" (в т.ч. Windows "\r\n")."""
     return text.replace("\r\n", "\n").replace("\r", "\n")
@@ -104,7 +139,7 @@ def _normalize_newlines(text: str) -> str:
 
 def load_documents(data_dir: Path) -> list[Document]:
     """
-    Считывает все файлы .txt и .html из data_dir (включая подкаталоги).
+    Считывает все файлы .txt, .html и .pdf из data_dir (включая подкаталоги).
 
     Возвращает список документов. Если в каталоге нет файлов поддерживаемых
     форматов, список будет пустым.
@@ -118,8 +153,11 @@ def load_documents(data_dir: Path) -> list[Document]:
         suffix = path.suffix.lower()
         if suffix not in SUPPORTED_EXTENSIONS:
             continue
-        raw_text = path.read_text(encoding="utf-8", errors="ignore")
-        content = html_to_text(raw_text) if suffix in _HTML_EXTENSIONS else raw_text
+        if suffix in _PDF_EXTENSIONS:
+            content = pdf_to_text(path.read_bytes())
+        else:
+            raw_text = path.read_text(encoding="utf-8", errors="ignore")
+            content = html_to_text(raw_text) if suffix in _HTML_EXTENSIONS else raw_text
         documents.append(
             Document(source=str(path.relative_to(data_dir)), text=_normalize_newlines(content))
         )

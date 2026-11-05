@@ -9,7 +9,7 @@ RAG-ассистент (Retrieval-Augmented Generation) для работы с �
   - [`python assistant.py`](assistant.py) — интерактивный ассистент: вопрос → ответ;
   - [`python web_assistant.py`](web_assistant.py) — веб-интерфейс на Flask: форма вопроса → ответ в браузере;
   - [`python vk_assistant.py`](vk_assistant.py) — ассистент для сообщества ВКонтакте (Longpoll API).
-- **Форматы базы знаний**: `.txt` и `.html` (из HTML извлекается текст).
+- **Форматы базы знаний**: `.txt`, `.html` (из HTML извлекается текст) и `.pdf` (из PDF извлекается текст).
 - **Чанкинг по абзацам**: один чанк — это абзац, т.е. фрагмент текста, разделённый двумя идущими подряд символами новой строки (`\n\n`).
 - **Векторные БД** (выбор в `.env`):
   - **ChromaDB** — локальная persistent-БД на диске (каталог `chroma_data/`);
@@ -32,7 +32,7 @@ assistant/
 ├── requirements.txt
 ├── .env.example          # шаблон настроек
 ├── .env                  # настройки (заполняется пользователем)
-├── data/                 # база знаний: *.txt и *.html
+├── data/                 # база знаний: *.txt, *.html и *.pdf
 │   ├── example.txt
 │   └── example.html
 └── rag/                  # библиотека RAG
@@ -90,7 +90,7 @@ cp .env.example .env
 
 ## Загрузка базы знаний
 
-Поместите файлы `.txt` и `.html` в каталог `data/` (или другой, указанный в `DATA_DIR`) и выполните:
+Поместите файлы `.txt`, `.html` или `.pdf` в каталог `data/` (или другой, указанный в `DATA_DIR`) и выполните:
 
 ```bash
 python ingest.py
