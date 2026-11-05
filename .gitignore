@@ -13,3 +13,5 @@ chroma_data/
 # SQLite-кэш ответов
 *.sqlite3
 cache.sqlite3
+
+.codeassistantignore

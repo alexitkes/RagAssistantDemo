@@ -79,6 +79,8 @@ class Config:
     # --- Общие настройки RAG ---
     data_dir: Path                # каталог с файлами базы знаний (*.txt, *.html)
     cache_db_path: Path           # файл SQLite-кэша ответов на вопросы
+    users_db_path: Path           # файл SQLite с зарегистрированными пользователями
+    flask_secret_key: str         # ключ подписи сессий Flask (FLASK_SECRET_KEY из .env)
     top_k: int                    # сколько релевантных чанков передавать в LLM
     history_size: int             # сколько последних пар «вопрос-ответ» передавать в LLM
     max_questions_per_minute: int # не более N вопросов в минуту от одного пользователя
@@ -183,6 +185,10 @@ class Config:
             cache_db_path=Path(
                 _env("CACHE_DB_PATH", "./cache.sqlite3") or "./cache.sqlite3"
             ).resolve(),
+            users_db_path=Path(
+                _env("USERS_DB_PATH", "./users.sqlite3") or "./users.sqlite3"
+            ).resolve(),
+            flask_secret_key=_env("FLASK_SECRET_KEY", "") or "",
             top_k=top_k,
             history_size=history_size,
             max_questions_per_minute=max_questions_per_minute,
