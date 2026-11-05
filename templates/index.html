@@ -13,9 +13,13 @@
 
 {% block content %}
 {% if answer is not none %}
+<div class="question">
+  <h2>Вопрос</h2>
+  <p class="question-text">{{ question }}</p>
+</div>
+
 <div class="answer">
   <h2>Ответ</h2>
-  <p class="subtitle" style="margin-top: 0"><strong>Вопрос:</strong> {{ question }}</p>
   <pre>{{ answer }}</pre>
 </div>
 {% endif %}

@@ -93,12 +93,15 @@
 
     .form-card button { width: 100%; }
 
-    .answer, .error, .notice {
+    .question, .answer, .error, .notice {
       border-radius: 8px;
       padding: 1rem 1.25rem;
       margin: 1.5rem 0;
     }
 
+    .question { background: #fffbe6; border: 1px solid #f0e0a0; }
+    .question h2 { margin-top: 0; }
+    .question-text { margin: 0.25rem 0 0; white-space: pre-wrap; }
     .answer { background: #eef6ff; border: 1px solid #bcd9f5; }
     .error { background: #fff0f0; border: 1px solid #f0b9b9; color: #8a1f1f; }
     .notice { background: #f0fff4; border: 1px solid #b9e6c3; color: #1f6a34; }
@@ -131,6 +134,7 @@
         --card-border: #333a44;
         --shadow: none;
       }
+      .question { background: #332f14; border-color: #5c5322; }
       .answer { background: #16283c; border-color: #2c4a6e; }
       .error { background: #3a1d1d; border-color: #6e2c2c; color: #f0b9b9; }
       .notice { background: #1d3a24; border-color: #2c6e3e; color: #b9e6c3; }
